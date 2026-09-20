@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments and local configuration
+.venv/
+venv/
+.env
+
+# Generated inference artifacts
+runs/detect/
+
+# Editor files
+.vscode/
+.idea/
