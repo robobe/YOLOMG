@@ -28,6 +28,26 @@ def choose_video(source):
 
 
 def motion_mask(previous, current):
+    """Return the current simple motion input as a three-channel image.
+
+    This is an absolute difference between consecutive blurred grayscale frames.
+    Bright pixels mean that the same screen location changed between frames.
+
+    Important: this helper does *not* ignore camera movement. If the camera
+    pans, stationary buildings also move on screen and can become bright.
+
+    The original YOLOMG mask32 pipeline removes most global camera movement:
+      1. Track a grid of background points with KLT optical flow.
+      2. Use RANSAC to fit a background homography and reject outlier tracks
+         from drones, cars, or bad matches.
+      3. Warp the neighboring frame into the current camera view.
+      4. Subtract the warped frame from the current frame. Background should
+         align and become dark; independently moving drones stay bright.
+
+    That original three-frame implementation is in test_code/FD5_mask.py and
+    test_code/MOD_Functions.py. It should replace this simple helper for a
+    faithful YOLOMG benchmark, using frames t-2, t, and t+2.
+    """
     previous = cv2.cvtColor(cv2.GaussianBlur(previous, (11, 11), 0), cv2.COLOR_BGR2GRAY)
     current = cv2.cvtColor(cv2.GaussianBlur(current, (11, 11), 0), cv2.COLOR_BGR2GRAY)
     return cv2.cvtColor(cv2.absdiff(previous, current), cv2.COLOR_GRAY2BGR)
@@ -60,6 +80,9 @@ def main():
         ok, frame = capture.read()
         if not ok:
             break
+        # The first frame has no neighbor, so use an empty mask. Later frames
+        # use the previous raw frame; store it before drawing boxes so overlays
+        # never appear as false motion in the next mask.
         mask = np.zeros_like(frame) if previous is None else motion_mask(previous, frame)
         previous = frame.copy()
         started = time.perf_counter()

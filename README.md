@@ -1,44 +1,112 @@
-# YOLOMG
-Codes and dataset for the paper "YOLOMG: Vision-based Drone-to-Drone Detection with Appearance and Pixel-Level Motion Fusion"
+# YOLOMG inference
 
-# Dataset
-ARD100 dataset
-- [BaiduYun](https://pan.baidu.com/s/1ycAoKbzQ1rlzvKr8VRakgw?pwd=1x2z ) (code:1x2z)
+YOLOMG detects drones from two inputs:
 
-![Dataset Example Images](data/ARD100_samples_show.png "Example Images ")
+```text
+RGB image + motion-mask image -> drone boxes
+```
 
-## codes to generate dataset is in ./test_code directory
-python generate_mask5.py is applied to generate mask32
+The bundled model is:
 
-python YOLOMG_extract_frames.py is used to generate images
+```text
+runs/train/ARD100_mask32-1280_uavs/weights/best.pt
+```
 
-python generate_dataset.py is used to generate train/test datasets. The videos id division is included.
+## Requirements
 
-## data processing in ./data directory
-### dataset spliting
-python3 split_train_val.py --xml_path xx/xxx/Annotations --txt_path xx/xxx/ImageSets/Main
-### transfer voc label to yolo label with .txt files
-python3 voc2yolo.py
-### generate images directory, train.txt, val.txt, test.txt
-python3 voc_label.py
-### generate mask directory, train2.txt, val2.txt, test2.txt
-Python3 voc_label2.py
+Run commands from the repository root with the local `uv` environment.
 
-# train
-python3 train.py --data data/NPS.yaml --cfg models/NPS_uav_s.yaml --weights yolov5s.pt --batch-size 8 --epochs 100 --imgsz 1280 --name NPS-1280
+Check that CUDA is available:
 
-# val
-python3 val.py --weights runs/train/NPS-1280/weights/best.pt --data data/NPS_test.yaml --task val --conf-thres 0.001 --name NPS_test-1280 --imgsz 1280 --batch-size 8 --device 0
+```bash
+uv run python cuda_test.py
+```
 
-# fast demo test
-python3 dualdetector.py
+Expected output includes:
 
-# DDP train
-python -m torch.distributed.run --nproc_per_node=4 --master_port 12345 train.py --data data/ARD100_mask32.yaml --cfg models/ARD100_drone_s.yaml --weights yolov5s.pt --batch-size 16 --epochs 100 --imgsz 1280 --name ARD100_mask32-1280 --device 0,1,2,3
+```text
+CUDA available: True
+GPU: NVIDIA GeForce RTX 5070 Laptop GPU
+```
 
+YOLOMG automatically uses CUDA when it is available. Add `--device cpu` to any command to force CPU inference.
 
-# github
-- [yolomg](https://github.com/Irisky123/YOLOMG)
+## Image inference
 
-# Dataset
-[Dataset Open YOLOMG: Vision-based Drone-to-Drone Detection with Appearance and Pixel-Level Motion Fusion [D]](https://zenodo.org/records/15870538)
+The included demo uses a matched RGB image and motion mask:
+
+```bash
+uv run python dualdetector.py
+```
+
+It prints the detected class, confidence, and box coordinates. The annotated result is saved to:
+
+```text
+runs/detect/dualdetector.jpg
+```
+
+Open the annotated image after inference:
+
+```bash
+uv run python dualdetector.py --view
+```
+
+Run your own RGB/mask pair:
+
+```bash
+uv run python dualdetector.py \
+  --image /path/to/rgb.jpg \
+  --mask /path/to/motion_mask.jpg \
+  --output runs/detect/result.jpg
+```
+
+The RGB and mask images must show the same frame at the same resolution.
+
+## Video inference
+
+ARD100 videos are located at:
+
+```text
+/home/user/datasets/ARD100/train_videos
+```
+
+Open a file picker in that folder:
+
+```bash
+uv run python video_detector.py
+```
+
+Or run a video directly:
+
+```bash
+uv run python video_detector.py \
+  --source /home/user/datasets/ARD100/train_videos/phantom09.mp4
+```
+
+The application draws drone boxes and inference FPS. Press `q` or `Esc` to stop. It writes the result to:
+
+```text
+runs/detect/<video-name>_detected.mp4
+```
+
+For a headless run without an OpenCV window:
+
+```bash
+uv run python video_detector.py \
+  --source /home/user/datasets/ARD100/train_videos/phantom09.mp4 \
+  --no-view
+```
+
+## Motion-mask note
+
+The original YOLOMG dataset uses camera-motion-compensated three-frame masks. `dualdetector.py` expects such a precomputed mask as its second input.
+
+The current video helper creates a simple consecutive-frame difference so it can run directly from a video. For a faithful benchmark of the original method, use the original compensated-mask pipeline in `test_code/FD5_mask.py`.
+
+Read [motion_explained.md](desgin/motion_explained.md) for a beginner-friendly explanation of the motion input.
+
+## More documentation
+
+- [Installation and changes](desgin/installation_and_changes.md)
+- [Repository guide](desgin/know_your_repo.md)
+- [YOLO26 migration plan](desgin/yolo26_migration_plan.md)

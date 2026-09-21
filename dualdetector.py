@@ -53,6 +53,8 @@ ROOT = Path(__file__).resolve().parent
 
 
 class Yolov5Detector():
+    # The model does not calculate motion itself. Pass a precomputed motion mask
+    # (made by OpenCV from neighboring video frames) as its second image input.
     def __init__(self, weights='', device=''):
         imgsz = 1280
         self.device = device = select_device(device)
@@ -89,6 +91,7 @@ class Yolov5Detector():
         return img
 
     def run(self, img1, img2, conf_thres=0.1, iou_thres=0.4, classes=None):
+        # img1 is the RGB frame; img2 is the OpenCV-generated motion mask.
         if img1 is None or img2 is None:
             raise ValueError('Both appearance and motion-mask images must be readable.')
         img0_shape = img1.shape[:2]

@@ -69,6 +69,120 @@ Some tracked points can be wrong, especially points on the flying drone. RANSAC 
 
 A homography can represent perspective changes, rotation, and translation. It is like stretching and sliding the earlier image until its background matches the target image.
 
+## How camera movement is ignored in detail
+
+“Ignoring camera movement” does not mean the program knows the real 3D camera position. It means the program finds a **2D picture transform** that makes the background in two pictures line up as closely as possible.
+
+### A simple camera-pan example
+
+Imagine the camera moves right. On the screen, a stationary building appears to move left by 20 pixels:
+
+```text
+earlier frame:       building corner at x = 500
+target frame:        same corner at x = 480
+```
+
+The program sees that many background points changed in a similar way. It learns a rule like:
+
+```text
+“move the earlier picture left by 20 pixels to match the target picture”
+```
+
+After applying that rule, the building corner is at `x = 480` in both images. Its difference becomes close to zero, so it is dark in the motion mask.
+
+A drone can have its own movement on top of the camera movement:
+
+```text
+background after camera correction:  matches
+drone after camera correction:       still does not match
+```
+
+That leftover mismatch is the bright evidence that helps the detector.
+
+### 1. KLT optical flow finds where the scene moved
+
+The code creates a regular grid of points over the grayscale image. For each point, KLT optical flow looks at the small pixel pattern around it and searches for the most similar pattern in the next frame.
+
+```text
+frame t-2                         frame t
+  point A at (x, y)  -------->      point A at (x-20, y+2)
+```
+
+Buildings, roads, and large background objects give reliable points because their small patterns are easy to follow. A blank sky often gives unreliable points because it has almost no texture.
+
+### 2. RANSAC chooses the shared background movement
+
+Not every tracked point should control the camera transform:
+
+- A point on the drone moves differently.
+- A point on a moving car moves differently.
+- A blurry or repeated texture can be tracked incorrectly.
+
+RANSAC repeatedly tries a transform from a small set of matches, then counts how many other matches agree with it. The transform supported by the largest group wins.
+
+```text
+background matches:  mostly agree with one camera movement  -> keep
+drone / car matches: disagree with that movement            -> ignore
+bad matches:         disagree                              -> ignore
+```
+
+This is why the method can use many point tracks without accidentally deciding that the drone's movement is the camera movement.
+
+### 3. A homography is the chosen camera-picture transform
+
+The winning transform is a 3×3 matrix called `H`:
+
+```text
+[x_target]       [ h11 h12 h13 ] [x_source]
+[y_target]   ~   [ h21 h22 h23 ] [y_source]
+[   1    ]       [ h31 h32 h33 ] [   1    ]
+```
+
+You do not need to calculate this matrix by hand. The important idea is that it can move, rotate, scale, skew, and slightly change perspective across the whole image. It is stronger than using only one average left/right shift.
+
+### 4. Warp the source image into the target camera view
+
+OpenCV uses `warpPerspective` with `H` to create a new image:
+
+```text
+source frame                         compensated source frame
+before camera correction      ->     looks like target camera view
+```
+
+Now, most stationary background pixels should have the same coordinates as in the target frame. Subtracting them mostly produces black pixels.
+
+### 5. Use only the leftover error as motion evidence
+
+The important operation is:
+
+```text
+residual = absolute_value(target_frame - compensated_source_frame)
+```
+
+This residual contains three kinds of brightness:
+
+1. **Useful:** independently moving objects, including a drone.
+2. **Normal error:** small alignment mistakes, blur, shadows, or exposure changes.
+3. **Bad error:** places where the camera movement model is not good enough.
+
+The neural network learns to use the useful patterns together with RGB appearance. It does not treat every bright pixel as a drone.
+
+## Limits of camera-motion compensation
+
+The method reduces camera motion; it cannot remove it perfectly.
+
+| Situation | Why it can leave bright noise |
+| --- | --- |
+| Camera moves sideways near close buildings | Close and far objects move by different amounts (parallax), but one homography describes only one global transform. |
+| Motion blur or fast rotation | KLT points become hard to track correctly. |
+| Mostly blank sky or water | There are too few textured background points. |
+| Large moving foreground object | It can hide background points and reduce RANSAC quality. |
+| Image borders after warping | Some pixels have no matching source pixel after the frame is shifted or rotated. |
+
+The current code falls back to an almost-identity transform when it has fewer than 15 tracked points. In that case, strong camera motion may remain in the motion mask.
+
+The compensation function calculates an invalid-border mask, but the original `FD5_mask.py` does not currently subtract that mask from its final residual. For a faithful baseline, keep this behavior. For a later improved version, masking those invalid borders is a sensible experiment because it can remove bright warp-edge artifacts.
+
 ### Step 5: warp the outer frames into the target view
 
 The earlier frame `t-2` is warped to look like it was filmed from the camera position at `t`. The later frame `t+2` is warped in the same way.

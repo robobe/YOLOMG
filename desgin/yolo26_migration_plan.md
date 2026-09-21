@@ -56,3 +56,36 @@ The motion implementation must become a pure reusable function: it returns a thr
 - Report mAP50-95, mAP50, precision, recall, and end-to-end per-frame latency.
 - Add a YOLO26 video application rooted at `/home/user/datasets/ARD100/train_videos`; it renders boxes and inference FPS and writes an annotated MP4.
 - Include checks for deterministic motion-mask generation, paired RGB/mask/label integrity, video-disjoint splits, CUDA forward/backward execution, and an end-to-end annotated-video smoke test.
+
+## Review: effort and environment
+
+This migration is a custom integration, not a direct checkpoint conversion.
+
+- Preserve the original centered `t-2 / t / t+2` motion mask for a fair reproduction. Video inference buffers two frames to create that mask.
+- Transfer compatible pretrained YOLO26 RGB backbone and neck weights only. The COCO-trained YOLO26 detection head cannot transfer directly to the one-class `Drone` head, and the new motion stem plus attention-fusion layers must start randomly initialized.
+
+### Estimated effort
+
+| Stage | Estimate |
+| --- | --- |
+| CUDA proof of concept for `model(rgb, mask)` | 2–4 days |
+| ARD100 frame, label, and original-mask materialization | 1–3 days processing time |
+| Custom Ultralytics dataset, trainer, validator, and predictor integration | 3–6 days |
+| First full 1280 training run | 3–10 days, depending on batch size and labeled-frame count |
+| Debugging, validation, and fair baseline comparison | 2–5 days |
+
+A first benchmark should take about 2–3 weeks elapsed time. A reliable research-quality comparison should allow 3–5 weeks.
+
+### Environment decision
+
+Use a separate YOLO26 environment. Installing Ultralytics into the existing YOLOv5 `.venv` can work, but dependency upgrades could break the legacy baseline needed for comparison.
+
+```text
+YOLOMG/
+  .venv/             # existing YOLOv5 baseline
+  yolo26/
+    .venv/           # isolated YOLO26 environment
+    pyproject.toml
+```
+
+Both environments use the same RTX 5070 GPU. The existing `.venv` remains the reproducible baseline; the new environment owns the Ultralytics YOLO26 dependency.
