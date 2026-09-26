@@ -12,6 +12,24 @@ The bundled model is:
 runs/train/ARD100_mask32-1280_uavs/weights/best.pt
 ```
 
+## Installation
+
+Clone the repository, then create the local environment and install its dependencies:
+
+```bash
+git clone https://github.com/robobe/YOLOMG.git
+cd YOLOMG
+uv venv
+uv pip install -r requirements.txt
+```
+
+For NVIDIA GPU inference, install the CUDA-enabled PyTorch wheels:
+
+```bash
+uv pip install --reinstall torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu128
+```
+
 ## Requirements
 
 Run commands from the repository root with the local `uv` environment.
@@ -70,11 +88,15 @@ ARD100 videos are located at:
 /home/user/datasets/ARD100/train_videos
 ```
 
-Open a file picker in that folder:
+Open the GUI to choose both a video and its optional XML annotation folder:
 
 ```bash
 uv run python video_detector.py
 ```
+
+Choose `/home/user/datasets/ARD100/annotations/phantom03` for the matching `phantom03.mp4` ground-truth overlay.
+When annotations are selected, the run also writes `runs/detect/<video-name>_summary.csv` with one row per annotated frame: prediction count, best IoU, matched boxes, and detection failures. A match requires IoU ≥ 0.50.
+The GUI saves its most recent selection and any named presets in the local `video_detector_presets.yaml` file.
 
 Or run a video directly:
 

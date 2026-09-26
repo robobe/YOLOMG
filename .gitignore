@@ -7,6 +7,7 @@ __pycache__/
 .venv/
 venv/
 .env
+video_detector_presets.yaml
 
 # Generated inference artifacts
 runs/detect/
